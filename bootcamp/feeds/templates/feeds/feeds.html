@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% load static from  staticfiles %}
+{% load i18n %}
+
+{% block head %}
+  <link href="{% static 'css/feeds.css' %}" rel="stylesheet">
+  <script src="{% static 'js/jquery.bullseye-1.0-min.js' %}"></script>
+  <script src="{% static 'js/feeds.js' %}"></script>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+  <script src="https://sdk.amazonaws.com/js/aws-sdk-2.211.0.min.js"></script>
+{% endblock head %}
+
+{% block main %}
+
+  <div class="row">
+    <div class="col-md-8 col-md-offset-2">
+
+      <!-- <div class="page-header">
+        <button  class="btn btn-primary pull-right btn-compose" title="{% trans 'Press Ctrl + P to compose' %}">
+          <span class="glyphicon glyphicon-share-alt"></span> {% trans 'Compose' %}
+        </button>
+        <h1>{% trans 'Feed' %}</h1>
+      </div> -->
+
+      <div class="panel panel-default panel-feed">
+        <div class="panel-heading">
+          <h3 class="panel-title">{% trans 'Latest Uploads' %}</h3>
+        </div>
+        <div class="panel-body">
+
+          <div class="compose">
+          <div class="container-fluid">
+          
+            <div class="col-xs-6">
+                <h5>{% trans "Upload New Video" %}</h5>
+            
+            </div>
+            <div class="col-xs-6 text-right">
+                <!-- Below is the upload files div -->
+                  
+                    
+                    <form class=''>
+                         <!-- <button class="add_file_btn btn" style="margin:5px;width:120px; height:30px; background:#337ab7;color:white;" onclick="document.getElementById('getFile').click()">Photos/Videos</button> -->
+
+                          <input class='upload_post' id="getFile" type='file' accept='audio/*,video/*,image/*' multiple='multiple' style="" />
+                    </form>
+                    <script type="text/javascript">
+                      $('#chose-file-btn').inputFileText({
+                          text: 'Select File'
+                      });
+                    </script>
+                
+        
+
+            <!-- Upload file div ends here -->
+            
+            </div>
+            
+
+            <form role="form" id="compose-form">
+              {% csrf_token %}
+              <input type="hidden" name="last_feed">
+              <div class="form-group">
+                <textarea class="form-control" placeholder="Leave Your Brief Instructions With Upload" rows="3" name="post" style="resize:none;"></textarea>
+              </div>
+         
+              <div class="form-group">
+                <button type="button" class="btn btn-primary btn-post" style="background: #f39c12;">
+                  <span class="glyphicon glyphicon-send"></span> {% trans 'Upload' %}
+                </button>
+                <button type="button" class="btn btn-default btn-cancel-compose">{% trans 'Cancel' %}</button>
+                <span class="help-block help-count pull-right">255</span>
+              </div>
+            </form>
+
+              <div class='item-loading-queue' style="margin-left:30px; margin-right:30px">
+
+                    </div>
+          </div>
+          
+          <div class="stream-update">
+            <a href="#"><span class="new-posts"></span> {% trans 'new posts' %}</a>
+          </div>
+          <ul class="stream">
+            {% for feed in feeds %}
+              {% include 'feeds/partial_feed.html' with feed=feed %}
+            {% endfor %}
+          </ul>
+          <div class="load">
+            <img src="{% static 'img/loading.gif' %}">
+          </div>
+          <form method="get" action="{% url 'load' %}" id="load_feed" autocomplete="off">
+            <input type="hidden" name="feed_source" id="feed_source" value="all">
+            <input type="hidden" name="from_feed" value="{{ from_feed }}">
+            <input type="hidden" name="page" value="{{ page }}">
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock main %}
+{% block javascript %}
+{% endblock %}
