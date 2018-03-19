@@ -1,7 +1,6 @@
 import dj_database_url
 from decouple import Csv, config
 from unipath import Path
-from bootcamp.aws.config import *
 
 PROJECT_DIR = Path(__file__).parent
 
