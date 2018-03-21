@@ -1,6 +1,15 @@
 $(function () {
+        var maxBlockSize = 256 * 1024;//Each file will be split in 256 KB.
+        var numberOfBlocks = 1;
+        var selectedFile = null;
+        var currentFilePointer = 0;
+        var totalBytesRemaining = 0;
+        var blockIds = new Array();
+        var blockIdPrefix = "block-";
+        var submitUri = null;
+        var bytesUploaded = 0;
     var page_title = $(document).attr("title");
-
+    var uploadProgress = new Object();
     // WebSocket connection management block.
     // Correctly decide between ws:// and wss://
     
@@ -45,6 +54,7 @@ $(function () {
     });
 
     $(".btn-post").click(function () {
+
         var selectedFiles = $('.upload_post').prop('files');
         if(selectedFiles.length === 0){
             alert("wrong");
@@ -62,7 +72,6 @@ $(function () {
             cache: false,
             success: function (data) {
 
-                alert(data.post_id);
                 $("ul.stream").prepend(data.html);
                 //$(".compose").slideUp();
                 $(".compose").removeClass("composing");
@@ -82,7 +91,6 @@ $(function () {
         var myFile = verifyFileIsImageMovieAudio(item)
         if (myFile){
             uploadFile(myFile, post_id)
-            alert("sahil");
         } else {
             // alert("Some files are invalid uploads.")
             alert("Cannot Upload without selecting a file");
@@ -365,7 +373,7 @@ function verifyFileIsImageMovieAudio(file){
         case 'gif':
         case 'jpeg':
             return file  
-        case 'mov':
+        case 'mkv':
         case 'mp4':
         case 'mpeg4':
         case 'avi':
@@ -378,24 +386,7 @@ function verifyFileIsImageMovieAudio(file){
     }
 };
 
-function constructFormPolicyData(policyData, fileItem) {
-   var contentType = fileItem.type != '' ? fileItem.type : 'application/octet-stream'
-    var url = policyData.url
-    var filename = policyData.filename
-    var repsonseUser = policyData.user
-    // var keyPath = 'www/' + repsonseUser + '/' + filename
-    var keyPath = policyData.file_bucket_path
-    var fd = new FormData()
-    fd.append('key', keyPath + filename);
-    fd.append('acl','private');
-    fd.append('Content-Type', contentType);
-    fd.append("AWSAccessKeyId", policyData.key)
-    fd.append('Policy', policyData.policy);
-    fd.append('filename', filename);
-    fd.append('Signature', policyData.signature);
-    fd.append('file', fileItem);
-    return fd
-}
+
 
 function fileUploadComplete(fileItem, policyData){
     data = {
@@ -421,11 +412,14 @@ function displayItems(fileItemList){
     var itemList = $('.item-loading-queue')
     itemList.html("")
     $.each(fileItemList, function(index, obj){
+        
         var item = obj.file
         var id_ = obj.id
         var order_ = obj.order
+        var progress = obj.progress
+        console.log(progress)
         var html_ = "<div class=\"progress\">" + 
-          "<div class=\"progress-bar\" role=\"progressbar\" style='width:" + item.progress + "%' aria-valuenow='" + item.progress + "' aria-valuemin=\"0\" aria-valuemax=\"100\"></div></div>"
+          "<div class=\"progress-bar\" role=\"progressbar\" style='width:" + progress + "%' aria-valuenow='" + progress + "' aria-valuemin=\"0\" aria-valuemax=\"100\"></div></div>"
         itemList.append("<div>" + order_ + ") " + item.name + "<a href='#' class='srvup-item-upload float-right' data-id='" + id_ + ")'>X</a> <br/>" + html_ + "</div><hr/>")
 
     })
@@ -433,8 +427,10 @@ function displayItems(fileItemList){
 
 
 function uploadFile(fileItem, post_id){
-        var policyData;
         var newLoadingItem;
+        var data;
+     
+
 
         // get AWS upload policy for each file uploaded through the POST method
         // Remember we're creating an instance in the backend so using POST is
@@ -447,74 +443,185 @@ function uploadFile(fileItem, post_id){
             },
             url: "/api/files/policy/",
             success: function(data){
-                    policyData = data
-                    alert("working here");
+                    data = data;
+                    upload_url = data.upload_url
+                    signature = data.sas_token
+                    handleFileSelect(fileItem, data);
+                    
             },
             error: function(data){
                 alert("An error occured, please try again later")
             }
         }).done(function(){
-            // construct the needed data using the policy for AWS
-            var fd = constructFormPolicyData(policyData, fileItem)
 
-            // use XML http Request to Send to AWS. 
-            var xhr = new XMLHttpRequest()
+            
+            
+        
 
-            // construct callback for when uploading starts
-            xhr.upload.onloadstart = function(event){
-                var inLoadingIndex = $.inArray(fileItem, fileItemList)
-                if (inLoadingIndex == -1){
-                    // Item is not loading, add to inProgress queue
-                    newLoadingItem = {
-                        file: fileItem,
-                        id: policyData.file_id,
-                        order: fileItemList.length + 1
-                    }
-                    fileItemList.push(newLoadingItem)
-                  }
-                fileItem.xhr = xhr
-            }
 
-            // Monitor upload progress and attach to fileItem.
-            xhr.upload.addEventListener("progress", function(event){
-                if (event.lengthComputable) {
-                 var progress = Math.round(event.loaded / event.total * 100);
-                    fileItem.progress = progress
-                    displayItems(fileItemList)
-                }
-            })
 
-            xhr.upload.addEventListener("load", function(event){
-                console.log("Complete")
-                // handle FileItem Upload being complete.
-                fileUploadComplete(fileItem, policyData)
-
-            })
-
-            xhr.open('POST', policyData.url , true);
-            xhr.send(fd);
         })
     }
 
-    function constructGetPolicyData(policyData, contType) {
 
-    var contentType = contType
-    var url = policyData.url
-    var filename = policyData.filename
-    var repsonseUser = policyData.user
+    function handleFileSelect(e, data) {
+        console.log(data.upload_url);
+    maxBlockSize = 256 * 1024;
+    currentFilePointer = 0;
+    totalBytesRemaining = 0;
+    selectedFile = e;
+    // $("#output").show();
+    // $("#fileName").text(selectedFile.name);
+    // $("#fileSize").text(selectedFile.size);
+    // $("#fileType").text(selectedFile.type);
+    var fileSize = selectedFile.size;
+    if (fileSize < maxBlockSize) {
+        maxBlockSize = fileSize;
+        console.log("max block size = " + maxBlockSize);
+    }
+    totalBytesRemaining = fileSize;
+    console.log("remaining bytes" + totalBytesRemaining);
+    if (fileSize % maxBlockSize == 0) {
+        numberOfBlocks = fileSize / maxBlockSize;
+    } else {
+        numberOfBlocks = parseInt(fileSize / maxBlockSize, 10) + 1;
+    }
+    console.log("total blocks = " + numberOfBlocks);
+    var baseUrl = data.upload_url;
+    var indexOfQueryStart = baseUrl.indexOf("?");
+    submitUri = baseUrl.substring(0, indexOfQueryStart) + '?' + data.sas_token;
+    console.log(submitUri);
+    uploadFileInBlocks();
+    newLoadingItem = {
+        file: e,
+        id: data.file_id,
+        order: fileItemList.length + 1,
+        progress: 0
+    }
+    fileItemList.push(newLoadingItem)
 
-    // var keyPath = 'www/' + repsonseUser + '/' + filename
-    var keyPath = policyData.file_bucket_path
-    var fd = new FormData()
-    fd.append('key', keyPath + filename);
-    fd.append('acl','private');
-    fd.append('Content-Type', contentType);
-    fd.append("AWSAccessKeyId", policyData.key)
-    fd.append('Policy', policyData.policy);
-    fd.append('filename', filename);
-    fd.append('Signature', policyData.signature);
-    return fd
 }
+
+    var reader = new FileReader();
+
+    reader.onloadend = function (evt) {
+    if (evt.target.readyState == FileReader.DONE) { // DONE == 2
+        var uri = submitUri + '&comp=block&blockid=' + blockIds[blockIds.length - 1];
+        var requestData = new Uint8Array(evt.target.result);
+            $.ajax({
+                url: uri,
+                type: "PUT",
+                data: requestData,
+                processData: false,
+                beforeSend: function(xhr) {
+                    xhr.setRequestHeader('x-ms-blob-type', 'BlockBlob');
+                    //xhr.setRequestHeader('Content-Length', requestData.length);
+                },
+                success: function (data, status) {
+                    console.log(data);
+                    console.log(status);
+                    bytesUploaded += requestData.length;
+                    var percentComplete = ((parseFloat(bytesUploaded) / parseFloat(selectedFile.size)) * 100).toFixed(2);
+                    // $("#fileUploadProgress").text(percentComplete + " %");
+                    
+                    for(var item in fileItemList){
+                        fileItemList[item].progress = percentComplete;
+                        console.log(fileItemList[item].progress);
+                        displayItems(fileItemList);
+                    }
+                    
+                    uploadFileInBlocks();
+                },
+                error: function(xhr, desc, err) {
+                    console.log(desc);
+                    console.log(err);
+                }
+            });
+        }
+    };
+
+     function uploadFileInBlocks() {
+            if (totalBytesRemaining > 0) {
+                console.log("current file pointer = " + currentFilePointer + " bytes read = " + maxBlockSize);
+                var fileContent = selectedFile.slice(currentFilePointer, currentFilePointer + maxBlockSize);
+                var blockId = blockIdPrefix + pad(blockIds.length, 6);
+                console.log("block id = " + blockId);
+                blockIds.push(btoa(blockId));
+                reader.readAsArrayBuffer(fileContent);
+                currentFilePointer += maxBlockSize;
+                totalBytesRemaining -= maxBlockSize;
+                
+                
+
+                console.log("rached" + totalBytesRemaining + "max" + maxBlockSize);
+                if (totalBytesRemaining < maxBlockSize) {
+                    console.log("looping to upload");
+                    maxBlockSize = totalBytesRemaining;
+                    
+                }
+            } else {
+                console.log("reached commit");
+                commitBlockList();
+            }
+        }
+
+    function commitBlockList() {
+            var uri = submitUri + '&comp=blocklist';
+            console.log(uri);
+            var requestBody = '<?xml version="1.0" encoding="utf-8"?><BlockList>';
+            for (var i = 0; i < blockIds.length; i++) {
+                requestBody += '<Latest>' + blockIds[i] + '</Latest>';
+            }
+            requestBody += '</BlockList>';
+            console.log(requestBody);
+            $.ajax({
+                url: uri,
+                type: "PUT",
+                data: requestBody,
+                beforeSend: function (xhr) {
+                    xhr.setRequestHeader('x-ms-blob-content-type', selectedFile.type);
+                    xhr.setRequestHeader('Content-Length', requestBody.length);
+                },
+                success: function (data, status) {
+                    console.log(data);
+                    console.log(status);
+                    blockIds = new Array();
+                },
+                error: function (xhr, desc, err) {
+                    console.log(desc);
+                    console.log(err);
+                    blockIds = new Array();
+                }
+            });
+ 
+        }
+        function pad(number, length) {
+            var str = '' + number;
+            while (str.length < length) {
+                str = '0' + str;
+            }
+            return str;
+        }
+
+//     function constructGetPolicyData(policyData, contType) {
+
+//     var contentType = contType
+//     var url = policyData.url
+//     var filename = policyData.filename
+//     var repsonseUser = policyData.user
+
+//     // var keyPath = 'www/' + repsonseUser + '/' + filename
+//     var keyPath = policyData.file_bucket_path
+//     var fd = new FormData()
+//     fd.append('key', keyPath + filename);
+//     fd.append('acl','private');
+//     fd.append('Content-Type', contentType);
+//     fd.append("AWSAccessKeyId", policyData.key)
+//     fd.append('Policy', policyData.policy);
+//     fd.append('filename', filename);
+//     fd.append('Signature', policyData.signature);
+//     return fd
+// }
 
     function getFile(){
         var policyData;

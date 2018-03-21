@@ -40,7 +40,7 @@ class Feed(models.Model):
             feeds = Feed.objects.filter(parent=None, id__lte=from_feed)
             for item in feeds:
                 if item.feed_media.all().count() != 0:
-                    item.url = item.feed_media.all()[0].name
+                    item.url = item.feed_media.all()[0].path
                     item.save()
                     print item.url
         else:

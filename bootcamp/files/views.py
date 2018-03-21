@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+    # -*- coding: utf-8 -*-
 
 from django.shortcuts import render
 
@@ -14,13 +14,11 @@ from django.contrib.auth.models import User
 from bootcamp.files.models import FileItem
 from rest_framework.views import APIView
 from bootcamp.feeds.models import Feed
-from .config_aws import (
-    AWS_UPLOAD_BUCKET,
-    AWS_UPLOAD_REGION,
-    AWS_UPLOAD_ACCESS_KEY_ID,
-    AWS_UPLOAD_SECRET_KEY
-)
+from azure.storage.blob import (BlockBlobService,ContainerPermissions,BlobPermissions,)
+from azure.storage.common import (AccessPolicy,ResourceTypes,AccountPermissions,)
+from datetime import datetime, timedelta
 from .models import FileItem
+from bootcamp import azure_config
 
 
 class FileUploadCompleteHandler(APIView):
@@ -59,6 +57,51 @@ class FilePolicyAPI(APIView):
         and auth credientails. In our case, we'll use
         Session Authentication but any auth should work.
         """
+
+        username = request.user.username
+        blob_url = "https://csg83f29287bbc9x43fax8c6.blob.core.windows.net/"
+        account_name = azure_config.account_name
+        account_key = azure_config.account_key
+        CONTAINER_NAME = azure_config.CONTAINER_NAME
+
+        block_blob_service = BlockBlobService(account_name=account_name, account_key=account_key)
+
+        signature = block_blob_service.generate_container_shared_access_signature(
+                    CONTAINER_NAME,
+                    ContainerPermissions.WRITE,
+                    datetime.utcnow() + timedelta(hours=1),
+                )
+
+        post_id = request.data.get('post_id')
+        filename_req = request.data.get('filename')
+        if not filename_req:
+            return Response({"message": "A filename is required"}, status=status.HTTP_400_BAD_REQUEST)
+        feed = Feed.objects.get(id=post_id)
+        file_obj = FileItem.objects.create(feed=feed, name=filename_req)
+        file_obj_id = file_obj.id
+        _, file_extension = os.path.splitext(filename_req)
+        filename_final = "{file_obj_id}{file_extension}".format(
+                    file_obj_id= file_obj_id,
+                    file_extension=file_extension)
+        upload_url = blob_url + CONTAINER_NAME + "/" + username + "_$1010_" + filename_final + "?"
+        feed.url = upload_url
+        feed.save() 
+        if filename_req and file_extension:
+        
+            file_obj.path = upload_url
+            file_obj.save()
+
+        data = { "blob_url": blob_url,
+        "sas_token": signature,
+        "upload_url": upload_url,
+        "file_id": file_obj_id,
+        }
+
+
+        print data
+
+        
+
         # filename_req = request.data.get('filename')
         # if not filename_req:
         #         return Response({"message": "A filename is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -74,17 +117,7 @@ class FilePolicyAPI(APIView):
         # To-be-uploaded file's name: Some Random File.mp4
         # Eventual Path on S3: <bucket>/username/2312/2312.mp4
         # """
-        # feed = Feed.objects.get(id=post_id)
-        # file_obj = FileItem.objects.create(feed=feed, name=filename_req)
-        # file_obj_id = file_obj.id
-        # upload_start_path = "{username}/{file_obj_id}/".format(
-        #             username = username_str,
-        #             file_obj_id=file_obj_id
-        #     )       
-        # _, file_extension = os.path.splitext(filename_req)
-        # filename_final = "{file_obj_id}{file_extension}".format(
-        #             file_obj_id= file_obj_id,
-        #             file_extension=file_extension
+        
 
         #         )
         # """
@@ -96,12 +129,7 @@ class FilePolicyAPI(APIView):
         #                          upload_start_path=upload_start_path,
         #                          filename_final=filename_final,
         #                     )
-        # if filename_req and file_extension:
-        #     """
-        #     Save the eventual path to the Django-stored FileItem instance
-        #     """
-        #     file_obj.path = final_upload_path
-        #     file_obj.save()
+       
 
         # policy_document_context = {
         #     "expire": policy_expires,
@@ -133,7 +161,11 @@ class FilePolicyAPI(APIView):
         #                 region=AWS_UPLOAD_REGION
         #                 )
         # policy = base64.b64encode(policy_document_str_encoded)
-        # signature = base64.b64encode(hmac.new(aws_secret, policy, hashlib.sha1).digest())
+        # signature = 
+
+
+
+
         
         # data = {
         #     "policy": policy,
@@ -145,7 +177,7 @@ class FilePolicyAPI(APIView):
         #     "url": url,
         #     "username": username_str,
         # }
-        return Response("data", status=status.HTTP_200_OK)
+        return Response(data, status=status.HTTP_200_OK)
 
 
     def get(self, request, *args, **kwargs):
