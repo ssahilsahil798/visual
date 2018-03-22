@@ -59,7 +59,7 @@ class FilePolicyAPI(APIView):
         """
 
         username = request.user.username
-        blob_url = "https://csg83f29287bbc9x43fax8c6.blob.core.windows.net/"
+        blob_url = "https://" + azure_config.account_name + ".blob.core.windows.net/"
         account_name = azure_config.account_name
         account_key = azure_config.account_key
         CONTAINER_NAME = azure_config.CONTAINER_NAME
@@ -86,8 +86,10 @@ class FilePolicyAPI(APIView):
         upload_url = blob_url + CONTAINER_NAME + "/" + username + "_$1010_" + filename_final + "?"
         feed.url = upload_url
         feed.save() 
+
         if filename_req and file_extension:
-        
+            print filename_req 
+            print file_extension
             file_obj.path = upload_url
             file_obj.save()
 

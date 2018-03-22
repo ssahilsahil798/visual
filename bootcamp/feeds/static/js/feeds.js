@@ -372,6 +372,8 @@ function verifyFileIsImageMovieAudio(file){
         case 'png':
         case 'gif':
         case 'jpeg':
+        case 'dng':
+        case 'nef':
             return file  
         case 'mkv':
         case 'mp4':
